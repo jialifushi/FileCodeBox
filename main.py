@@ -101,23 +101,85 @@ app.include_router(chunk_api)
 app.include_router(admin_api)
 
 
+import os
+from fastapi import FastAPI
+
+# ... (existing imports)
+
 @app.exception_handler(404)
 @app.get("/")
 async def index(request=None, exc=None):
-    return HTMLResponse(
-        content=open(
-            BASE_DIR / f"{settings.themesSelect}/index.html", "r", encoding="utf-8"
-        )
+    content = (
+        open(BASE_DIR / f"{settings.themesSelect}/index.html", "r", encoding="utf-8")
         .read()
         .replace("{{title}}", str(settings.name))
         .replace("{{description}}", str(settings.description))
         .replace("{{keywords}}", str(settings.keywords))
         .replace("{{opacity}}", str(settings.opacity))
         .replace('"/assets/', '"assets/')
-        .replace("{{background}}", str(settings.background)),
+        .replace("{{background}}", str(settings.background))
+    )
+
+    access_code = os.environ.get("FILECODEBOX_ACCESS_CODE")
+    if access_code:
+        injection_script = f"""
+        <script>
+            (function() {{
+                const accessCode = '{access_code}';
+                const authKey = 'filecodebox_auth_status';
+                const EXPIRATION_HOURS = 72;
+
+                document.body.addEventListener('click', function(event) {{
+                    const link = event.target.closest('a[href="#/send"]');
+                    if (!link) {{
+                        return;
+                    }}
+
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                    let isAuthorized = false;
+                    try {{
+                        const authData = JSON.parse(localStorage.getItem(authKey));
+                        if (authData && authData.authorized) {{
+                            const now = new Date().getTime();
+                            const ageInMillis = now - authData.timestamp;
+                            if (ageInMillis < EXPIRATION_HOURS * 60 * 60 * 1000) {{
+                                isAuthorized = true;
+                            }}
+                        }}
+                    }} catch (e) {{
+                        // Ignore parsing errors
+                    }}
+
+                    if (isAuthorized) {{
+                        window.location.hash = '/send';
+                        return;
+                    }}
+
+                    const password = prompt('请输入访问密码:');
+                    if (password === accessCode) {{
+                        const authData = {{
+                            authorized: true,
+                            timestamp: new Date().getTime()
+                        }};
+                        localStorage.setItem(authKey, JSON.stringify(authData));
+                        window.location.hash = '/send';
+                    }} else if (password !== null) {{
+                        alert('密码错误!');
+                    }}
+                }}, true);
+            }})();
+        </script>
+        """
+        content = content.replace("</body>", f"{injection_script}</body>")
+
+    return HTMLResponse(
+        content=content,
         media_type="text/html",
         headers={"Cache-Control": "no-cache"},
     )
+
 
 
 @app.get("/robots.txt")

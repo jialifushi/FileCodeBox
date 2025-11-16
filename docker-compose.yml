@@ -1,12 +1,15 @@
 version: "3"
 services:
   file-code-box:
-    image: lanol/filecodebox:latest
+    build: .
+    image: filecodebox-auth
     volumes:
       - fcb-data:/app/data:rw
     restart: unless-stopped
     ports:
       - "12345:12345"
+    environment:
+      - FILECODEBOX_ACCESS_CODE=hertz
 volumes:
   fcb-data:
     external: false
